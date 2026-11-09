@@ -1,4 +1,35 @@
+```gitignore
+# Python cache
 __pycache__/
+*.py[cod]
+*$py.class
+
+# Virtual environments
 venv/
-*.pdf
 .venv/
+env/
+
+# Environment variables and secrets
+.env
+.env.*
+
+# Generated PDF files
+*.pdf
+
+# IDE and editor
+.vscode/
+.idea/
+
+# Logs and temporary files
+*.log
+*.tmp
+
+# Testing
+.pytest_cache/
+.coverage
+
+# OS files
+.DS_Store
+Thumbs.db
+desktop.ini
+```
