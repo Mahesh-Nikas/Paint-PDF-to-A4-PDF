@@ -1,0 +1,147 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Paint PDF to A4 PDF</title>
+<style>
+  :root{--bg:#f3f5f9;--card:#fff;--ink:#16213a;--muted:#5b6784;--line:#d5dbe8;--blue:#3a45d6;--blue-d:#2b34b0;--err:#b3261e;--ok:#1d7a4a}
+  @media (prefers-color-scheme:dark){:root{--bg:#10141f;--card:#181e2d;--ink:#e8ecf6;--muted:#9aa5c0;--line:#2a3350;--blue:#7b86ff;--blue-d:#9aa3ff;--err:#ff8a80;--ok:#6fd6a0}}
+  *{box-sizing:border-box}
+  body{margin:0;background:var(--bg);color:var(--ink);font:16px/1.55 system-ui,-apple-system,"Segoe UI",Roboto,sans-serif}
+  main{max-width:640px;margin:0 auto;padding:40px 18px 56px}
+  h1{font-size:1.7rem;line-height:1.2;margin:0 0 6px}
+  .sub{color:var(--muted);margin:0 0 24px}
+  .card{background:var(--card);border:1px solid var(--line);border-radius:12px;padding:20px}
+  .drop{display:block;border:2px dashed var(--blue);border-radius:10px;padding:34px 16px;text-align:center;cursor:pointer}
+  .drop:hover,.drop.over{background:color-mix(in srgb,var(--blue) 8%,transparent)}
+  .drop strong{display:block;font-size:1.05rem}
+  .drop span{color:var(--muted);font-size:.92rem}
+  input[type=file]{position:absolute;opacity:0;width:1px;height:1px}
+  .drop:focus-within{outline:3px solid var(--blue);outline-offset:2px}
+  details{margin-top:16px}
+  summary{cursor:pointer;color:var(--blue-d);font-weight:600}
+  .opts{display:grid;gap:12px;margin-top:12px}
+  label.row{display:grid;gap:4px;font-size:.93rem}
+  label.chk{display:flex;gap:8px;align-items:center;font-size:.93rem}
+  input[type=text],input[type=number],select{font:inherit;padding:8px 10px;border:1px solid var(--line);border-radius:8px;background:var(--bg);color:var(--ink);width:100%}
+  button{font:inherit;font-weight:600;border:0;border-radius:10px;padding:12px 18px;background:var(--blue);color:#fff;cursor:pointer;width:100%;margin-top:18px}
+  button:hover{background:var(--blue-d)}
+  button:disabled{opacity:.55;cursor:not-allowed}
+  button:focus-visible,a.dl:focus-visible{outline:3px solid var(--blue);outline-offset:2px}
+  .bar{height:10px;background:var(--line);border-radius:6px;overflow:hidden;margin:14px 0 8px}
+  .bar i{display:block;height:100%;width:0;background:var(--blue);transition:width .25s}
+  #status{min-height:1.5em;margin:0}
+  .err{color:var(--err)} .ok{color:var(--ok)}
+  a.dl{display:block;text-align:center;text-decoration:none;font-weight:600;border-radius:10px;padding:12px 18px;background:var(--ok);color:#fff;margin-top:14px}
+  .how{margin:26px 0 0;padding-left:20px;color:var(--muted);font-size:.93rem}
+  footer{margin-top:28px;color:var(--muted);font-size:.85rem}
+  footer a{color:inherit}
+  [hidden]{display:none!important}
+  @media (prefers-reduced-motion:reduce){.bar i{transition:none}}
+</style>
+</head>
+<body>
+<main>
+  <h1>Paint PDF to A4 PDF</h1>
+  <p class="sub">Upload a PDF made from Paint screenshots. You get clean A4 pages with no wasted space and no diagrams cut in half.</p>
+
+  <form id="form" class="card">
+    <label class="drop" id="drop">
+      <input type="file" id="file" name="file" accept="application/pdf,.pdf">
+      <strong id="fname">Choose a PDF or drop it here</strong>
+      <span>Up to {{ max_mb }} MB and {{ max_pages }} pages</span>
+    </label>
+
+    <details>
+      <summary>Options</summary>
+      <div class="opts">
+        <label class="chk"><input type="checkbox" name="keep_diagrams" checked> Keep each diagram on one page</label>
+        <label class="chk"><input type="checkbox" name="page_numbers" checked> Add page numbers</label>
+        <label class="row">Header text (optional)
+          <input type="text" name="header_text" maxlength="80" placeholder="Java Multithreading Notes">
+        </label>
+        <label class="row">Left margin for hole punching or binding (pixels)
+          <input type="number" name="left_margin" value="120" min="0" max="400">
+        </label>
+        <label class="row">Quality
+          <select name="quality">
+            <option value="high">High (sharper, larger file)</option>
+            <option value="standard">Standard (faster, smaller file)</option>
+          </select>
+        </label>
+      </div>
+    </details>
+
+    <button type="submit" id="go" disabled>Convert to A4</button>
+
+    <div id="progress" hidden>
+      <div class="bar"><i id="fill"></i></div>
+      <p id="status" role="status" aria-live="polite"></p>
+    </div>
+    <a id="dl" class="dl" hidden>Download PDF</a>
+  </form>
+
+  <ol class="how">
+    <li>Choose your Paint-made PDF.</li>
+    <li>Press Convert and wait for the progress bar.</li>
+    <li>Download the new A4 PDF. Files are deleted from the server after about 30 minutes.</li>
+  </ol>
+  <footer>Free to use. Your upload is deleted as soon as conversion ends.{% if source_url %} <a href="{{ source_url }}">Source code</a>{% endif %}</footer>
+</main>
+
+<script>
+const $ = id => document.getElementById(id);
+const form = $('form'), file = $('file'), go = $('go'), drop = $('drop');
+const status = $('status'), fill = $('fill'), prog = $('progress'), dl = $('dl');
+let timer = null;
+
+function setFile(f){
+  if(!f){ $('fname').textContent='Choose a PDF or drop it here'; go.disabled=true; return; }
+  $('fname').textContent = f.name + ' (' + (f.size/1048576).toFixed(1) + ' MB)';
+  go.disabled = false; dl.hidden = true;
+}
+file.addEventListener('change', () => setFile(file.files[0]));
+['dragenter','dragover'].forEach(e => drop.addEventListener(e, ev => {ev.preventDefault(); drop.classList.add('over');}));
+['dragleave','drop'].forEach(e => drop.addEventListener(e, ev => {ev.preventDefault(); drop.classList.remove('over');}));
+drop.addEventListener('drop', ev => {
+  const f = ev.dataTransfer.files[0];
+  if(f){ const dt = new DataTransfer(); dt.items.add(f); file.files = dt.files; setFile(f); }
+});
+
+function fail(msg){ clearInterval(timer); status.className='err'; status.textContent=msg; go.disabled=false; fill.style.width='0'; }
+
+form.addEventListener('submit', async ev => {
+  ev.preventDefault();
+  if(!file.files[0]) return;
+  go.disabled = true; dl.hidden = true; prog.hidden = false;
+  status.className=''; status.textContent='Uploading...'; fill.style.width='3%';
+  let res;
+  try { res = await fetch('/api/convert', {method:'POST', body:new FormData(form)}); }
+  catch(e){ return fail('Could not reach the server. If the site was idle, wait a minute and try again.'); }
+  let data = {}; try { data = await res.json(); } catch(e){}
+  if(!res.ok) return fail(data.error || 'Upload failed.');
+  poll(data.job_id);
+});
+
+function poll(id){
+  clearInterval(timer);
+  timer = setInterval(async () => {
+    let r, s;
+    try { r = await fetch('/api/status/' + id); s = await r.json(); } catch(e){ return; }
+    if(s.status === 'queued'){ status.textContent='Waiting for a free slot...'; }
+    else if(s.status === 'working'){
+      const pct = s.total ? Math.max(5, Math.round(s.done/s.total*100)) : 5;
+      fill.style.width = pct + '%';
+      status.textContent = s.total ? `Converting page ${s.done} of ${s.total}...` : 'Starting...';
+    } else if(s.status === 'done'){
+      clearInterval(timer); fill.style.width='100%';
+      status.className='ok'; status.textContent = `Done. Your PDF has ${s.pages} A4 pages.`;
+      dl.href = '/api/download/' + id; dl.hidden = false; go.disabled = false;
+    } else if(s.status === 'error'){ fail(s.error || 'Conversion failed.'); }
+    else if(s.status === 'expired'){ fail('This job expired. Please convert again.'); }
+  }, 1000);
+}
+</script>
+</body>
+</html>

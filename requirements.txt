@@ -1,0 +1,6 @@
+flask>=3.0
+gunicorn>=22.0
+pypdfium2>=4.30
+numpy>=1.26
+pillow>=10.0
+reportlab>=4.0
